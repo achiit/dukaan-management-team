@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="hi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ग्राहक बही</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--tx:#1d1d1b;--mu:#6b6b66;--ac:#1f7a4d;--bd:#e2dfd6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161614;--card:#222220;--tx:#f0eee8;--mu:#a09e96;--ac:#3fb67a;--bd:#38362f}}
+:root[data-theme="dark"]{--bg:#161614;--card:#222220;--tx:#f0eee8;--mu:#a09e96;--ac:#3fb67a;--bd:#38362f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,sans-serif;padding:12px;max-width:640px;margin:auto}
+h1{font-size:20px;margin:4px 0 10px}.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+input,textarea{width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+.row{display:flex;gap:8px;flex-wrap:wrap}.chip{flex:1;min-width:70px;padding:11px 6px;text-align:center;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:var(--bg);font-size:14px}
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.main{width:100%;margin-top:14px;padding:14px;border:0;border-radius:12px;background:var(--ac);color:#fff;font:600 17px inherit;cursor:pointer}
+button.sec{padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font:inherit;cursor:pointer}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs .chip{font-weight:600}
+.msg{font-size:14px;margin-top:8px;min-height:18px}.err{color:#c0392b}.ok{color:var(--ac)}
+.vh{display:flex;justify-content:space-between;font-weight:700;margin:14px 0 6px}.it{padding:9px 0;border-top:1px solid var(--bd);font-size:15px}
+.it small{color:var(--mu);display:block}.note{font-size:12px;color:var(--mu);margin-top:8px}
+</style></head><body>
+<h1>📒 ग्राहक बही</h1>
+<div class="tabs"><div class="chip on" id="t1" onclick="tab(1)">नई एंट्री</div><div class="chip" id="t2" onclick="tab(2)">लिस्ट / Excel</div></div>
+
+<div id="p1" class="card">
+ <label>ग्राहक का नाम *</label><input id="nm" autocomplete="off">
+ <label>गाँव / पता *</label><input id="vl" list="vlist" autocomplete="off"><datalist id="vlist"></datalist>
+ <label>मोबाइल नंबर *</label><input id="ph" type="tel" inputmode="numeric" maxlength="10">
+ <label>ग्राहक की रेटिंग</label>
+ <div class="row" id="rt"></div>
+ <label>लेन-देन का तरीका</label>
+ <div class="row" id="tp"></div>
+ <label>नोट / डिटेल (वैकल्पिक)</label><textarea id="nt" rows="2"></textarea>
+ <button class="main" onclick="save()">✔ सेव करें</button>
+ <div class="msg" id="msg"></div>
+ <div class="note" id="stat"></div>
+</div>
+
+<div id="p2" style="display:none">
+ <div class="card">
+  <input id="q" placeholder="नाम, गाँव या नंबर खोजें" oninput="render()">
+  <div class="row" style="margin-top:10px"><button class="sec" style="flex:1" onclick="xl()">⬇ Excel डाउनलोड (सभी गाँव + कम्बाइंड)</button></div>
+  <div class="note">Excel में हर गाँव की अलग शीट बनती है और एक "सभी ग्राहक" शीट भी।</div>
+  <div id="cnt" class="note"></div>
+ </div>
+ <div id="list"></div>
+</div>
+
+<script>
+const RT=["⭐ बेस्ट","👍 बेटर","🙂 ठीक","⚠ कमज़ोर"],TP=["💵 नकद","📝 उधार","🔁 दोनों"];
+let rating=RT[1],typ=TP[0],rows=[],db=null,local=[];
+function chips(id,arr,get,set){const el=document.getElementById(id);el.innerHTML="";arr.forEach(v=>{const d=document.createElement("div");d.className="chip"+(get()===v?" on":"");d.textContent=v;d.onclick=()=>{set(v);chips(id,arr,get,set)};el.appendChild(d)})}
+chips("rt",RT,()=>rating,v=>rating=v);chips("tp",TP,()=>typ,v=>typ=v);
+function tab(n){p1.style.display=n==1?"":"none";p2.style.display=n==2?"":"none";t1.className="chip"+(n==1?" on":"");t2.className="chip"+(n==2?" on":"");if(n==2)render()}
+const key=s=>s.trim().replace(/\s+/g," ").toLowerCase();
+function setMsg(t,c){msg.textContent=t;msg.className="msg "+c}
+async function save(){
+ const r={name:nm.value.trim(),village:vl.value.trim().replace(/\s+/g," "),phone:ph.value.replace(/\D/g,""),rating,type:typ,note:nt.value.trim(),ts:Date.now()};
+ if(!r.name||!r.village)return setMsg("नाम और गाँव ज़रूरी है","err");
+ if(r.phone.length!==10)return setMsg("मोबाइल नंबर 10 अंकों का होना चाहिए","err");
+ if(rows.some(x=>x.phone===r.phone&&key(x.name)===key(r.name)))return setMsg("यह ग्राहक पहले से दर्ज है","err");
+ try{
+  if(db){await db.collection("customers").doc("c"+r.ts+Math.random().toString(36).slice(2,6)).set(r)}
+  else{local.push(r);rows=local.slice();upd()}
+  nm.value=ph.value=nt.value="";setMsg("सेव हो गया ✔","ok");nm.focus();
+ }catch(e){setMsg("सेव नहीं हुआ, दोबारा कोशिश करें","err")}
+}
+function groups(){const g={};rows.slice().sort((a,b)=>a.ts-b.ts).forEach(r=>{const k=key(r.village);(g[k]=g[k]||{name:r.village,items:[]}).items.push(r)});return Object.values(g).sort((a,b)=>a.name.localeCompare(b.name,"hi"))}
+function upd(){vlist.innerHTML=groups().map(g=>`<option value="${g.name.replace(/"/g,"")}">`).join("");stat.textContent="कुल ग्राहक: "+rows.length}
+function render(){
+ const q=key(document.getElementById("q").value||"");let h="",n=0;
+ groups().forEach(g=>{const it=g.items.map((r,i)=>({r,i:i+1})).filter(x=>!q||key(x.r.name+" "+x.r.village+" "+x.r.phone).includes(q));if(!it.length)return;n+=it.length;
+  h+=`<div class="vh"><span></span></div>`;const d=document.createElement("div");
+  h+=`<div class="card"><div class="vh" style="margin-top:0"><span></span><span></span></div></div>`.slice(0,0);
+  h+=`<div class="card"><div class="vh" style="margin-top:0"><span>${esc(g.name)}</span><span>${g.items.length}</span></div>`+it.map(x=>`<div class="it"><b>${x.i}. ${esc(x.r.name)}</b> · ${esc(x.r.phone)}<small>${x.r.rating} · ${x.r.type}${x.r.note?" · "+esc(x.r.note):""}</small></div>`).join("")+`</div>`});
+ list.innerHTML=h.replace(/<div class="vh"><span><\/span><\/div>/g,"");cnt.textContent="दिख रहे: "+n+" / कुल "+rows.length
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const HD=["नंबर","नाम","गाँव","मोबाइल","रेटिंग","लेन-देन","नोट"];
+async function xl(){
+ if(!rows.length)return alert("अभी कोई एंट्री नहीं है");
+ const wb=XLSX.utils.book_new(),used=new Set(["सभी ग्राहक"]);
+ const all=rows.slice().sort((a,b)=>a.ts-b.ts).map((r,i)=>[i+1,r.name,r.village,r.phone,r.rating,r.type,r.note]);
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([HD,...all]),"सभी ग्राहक");
+ groups().forEach(g=>{let nme=g.name.replace(/[\\\/\?\*\[\]:]/g,"").slice(0,28)||"गाँव",k=nme,c=2;while(used.has(k))k=nme.slice(0,25)+"_"+c++;used.add(k);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([HD,...g.items.map((r,i)=>[i+1,r.name,r.village,r.phone,r.rating,r.type,r.note])]),k)});
+ const out=XLSX.write(wb,{type:"array",bookType:"xlsx"});
+ try{const d=await claude.use("downloads");if(!d)throw 0;await d.save({filename:"ग्राहक_बही.xlsx",data:new Blob([out])})}catch(e){if(e&&e.code==="declined")return;alert("इस व्यू में डाउनलोड उपलब्ध नहीं है")}
+}
+(async()=>{
+ try{db=await claude.use("db")}catch(e){db=null}
+ if(db){db.collection("customers").orderBy("ts").onSnapshot(s=>{rows=[];s.forEach(d=>rows.push(d.data()));upd();if(p2.style.display!=="none")render()});}
+ else{setMsg("⚠ शेयर्ड सेव उपलब्ध नहीं (अभी सिर्फ़ इसी फ़ोन में)","err")}
+ upd();
+})();
+</script></body></html>
